@@ -13,6 +13,15 @@
  */
 package com.google.common.base;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.annotations.Beta;
+import com.google.common.annotations.GwtCompatible;
+import java.io.Serializable;
+import java.util.Iterator;
+import java.util.Set;
+import javax.annotation.Nullable;
+
 /**
  * 一个可以包含另一个对象非空有引用的对象。该类的实例要么包含非空引用要么什么都没有（Absent），绝不会包含null。
  * 
@@ -20,16 +29,22 @@ package com.google.common.base;
  * 
  * 常有以下用途：
  * 
- * 作为方法的返回类型，作为return null的替代来代指返回的对象为absent
- * 来区分未知 和 没有映射到（not present in a map or present in the map with value absent）
- * 用来封装不支持null的集合
+ * 作为方法的返回类型，作为return null的替代来代指返回的对象为absent 来区分未知 和 没有映射到（not present in a map
+ * or present in the map with value absent） 用来封装不支持null的集合
  * 
- *
+ * 该类并不兼容java 8的 java.util.Optional
+ * 
+ * 该类是可序列化的(java.util.Optional并不能)
+ * 
  * @author wangguanglei
  *
  */
 
+@GwtCompatible(serializable = true)
+public abstract class Optional<T> implements Serializable {
 
-public class Optional {
+	public static <T> Optional<T> absent() {
+		return Absent.withType();
+	}
 
 }
