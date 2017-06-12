@@ -43,8 +43,44 @@ import javax.annotation.Nullable;
 @GwtCompatible(serializable = true)
 public abstract class Optional<T> implements Serializable {
 
+	/**
+	 * Returns an Optional instance with no contained reference.
+	 * 
+	 * This method is equivalent to Java 8's Optional.empty.
+	 * 
+	 * @return
+	 */
 	public static <T> Optional<T> absent() {
 		return Absent.withType();
+	}
+
+	/**
+	 * Returns an Optional instance containing the given non-null reference. To
+	 * have null treated as absent use fromNullable instead.
+	 * 
+	 * Compared to java.util.Optional: no differences.
+	 * 
+	 * @throws nullPointerException
+	 *             if reference is null;
+	 * @param reference
+	 * @return
+	 */
+	public static <T> Optional<T> of(T reference) {
+		return new Present<T>(checkNotNull(reference));
+	}
+
+	/**
+	 * If nullableReference is non-null , returns an Optional instance
+	 * containing that reference; otherwise returns Optional.absent
+	 * 
+	 * Comparison to java.util.Optional: this method is equivalent to Java 8's
+	 * Optional.ofNullable
+	 * 
+	 * @param nullableReference
+	 * @return
+	 */
+	public static <T> Optional<T> fromNullable(@Nullable T nullableReference) {
+		return (nullableReference == null) ? Optional.<T> absent() : new Present<T>(nullableReference);
 	}
 
 }
