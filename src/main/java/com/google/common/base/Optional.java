@@ -82,5 +82,16 @@ public abstract class Optional<T> implements Serializable {
 	public static <T> Optional<T> fromNullable(@Nullable T nullableReference) {
 		return (nullableReference == null) ? Optional.<T> absent() : new Present<T>(nullableReference);
 	}
+	
+	/**
+	 * Returns the equivalent value to the given java.util.Optional , 
+	 * or null if the argument is null
+	 * @param javaUtilOptional
+	 * @return
+	 */
+	@Nullable
+	public static <T> Optional<T> fromJavaUtil(@Nullable java.util.Optional<T> javaUtilOptional){
+		return (javaUtilOptional == null)?null:fromNullable(javaUtilOptional.orElse(null));
+	}
 
 }
