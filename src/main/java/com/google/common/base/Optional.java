@@ -93,5 +93,35 @@ public abstract class Optional<T> implements Serializable {
 	public static <T> Optional<T> fromJavaUtil(@Nullable java.util.Optional<T> javaUtilOptional){
 		return (javaUtilOptional == null)?null:fromNullable(javaUtilOptional.orElse(null));
 	}
+	/*
+	 * Return the equivalent java.util.Optional value to the given com.google.common.base.Optional ,
+	 * or null  if the argument is null
+	 * 
+	 * 
+	 */
+	public static <T> java.util.Optional<T> toJavaUtil(@Nullable Optional<T> googleOptional){
+		return googleOptional == null ? null :googleOptional.toJavaUtil();
+	}
+	
+	Optional(){}
+	
+	/**
+	 * Returns true if this holder contains a non-null instance
+	 * Comparison to java.util.Optional: no differences. 
+	 * @return
+	 */
+	public abstract boolean isPresent();
+	
+	/**
+	 * Returns the contained instance, which must be present
+	 * If the instance might be absent, use or / orNull instead.
+	 * 
+	 * Comparison to java.util.Optional: when the value is absent, this method 
+	 * throws IllegalStateException, whereas the Java 8 counterpart throws 
+	 * java.util.NoSuchElementException.
+	 * 
+	 * @return
+	 */
+	public abstract T get();
 
 }
