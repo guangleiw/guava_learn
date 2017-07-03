@@ -80,5 +80,9 @@ public abstract class Ordering<T> implements Comparator<T> {
     public Ordering() {
         // TODO Auto-generated constructor stub
     }
+    
+    public <S extends T> Ordering<S> nullsFirst(){
+    	return new NullsFirstOrdering<S>(this);
+    }
 
 }

@@ -40,6 +40,9 @@ final class  NaturalOrdering  extends Ordering<Comparable> implements Serializab
 
     public <S extends Comparable> Ordering<S> nullsFirst(){
         Ordering<Comparable> result = nullsFirst;
+        if(result == null){
+        	result = nullsFirst = super.nullsFirst();
+        }
     }
     
     public <S extends Comparable> Ordering<S> nullsLast(){
