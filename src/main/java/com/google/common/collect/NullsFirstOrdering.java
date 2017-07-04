@@ -17,6 +17,7 @@
 package com.google.common.collect;
 
 import java.io.Serializable;
+import java.util.Comparator;
 
 import com.google.common.annotations.GwtCompatible;
 
@@ -28,4 +29,23 @@ final class NullsFirstOrdering<T> extends Ordering<T> implements Serializable {
 	NullsFistOrdering(Ordering<? super T> ordering){
 		this.ordering = ordering;
 	}
+
+    public int compare(T arg0, T arg1) {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    public Comparator<T> reversed() {
+        // TODO Auto-generated method stub
+        return Ordering.super.reversed();
+    }
+
+    @Override
+    public <S extends T> Ordering<S> nullsFirst() {
+        // TODO Auto-generated method stub
+        return super.nullsFirst();
+    }
+	
+	
+	
 }
