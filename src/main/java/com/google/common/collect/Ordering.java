@@ -17,12 +17,20 @@ package com.google.common.collect;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+
+import javax.annotation.Nullable;
 
 import com.google.common.annotations.GwtCompatible;
 import com.google.common.annotations.VisibleForTesting;
@@ -104,7 +112,7 @@ public abstract class Ordering<T> implements Comparator<T> {
     }
 
     /**
-     * Returns and ordering that compares objects according to the order in
+     * Returns an ordering that compares objects according to the order in
      * which they appear in the given list.Only objects present in the list may
      * be compared. This comparator imposes a "partial ordering" over the type
      * T. Subsequent changes to the valuesInOrder list will have no effect on
@@ -124,7 +132,7 @@ public abstract class Ordering<T> implements Comparator<T> {
      *             Object equals)
      */
     @GwtCompatible(serializable = true)
-    public static <T> Ordering<T> explicit(List<T> valusInOrder) {
+    public static <T> Ordering<T> explicit(List<T> valuesInOrder) {
         return new ExplicitOrdering<T>(valuesInOrder);
     }
 
@@ -137,13 +145,12 @@ public abstract class Ordering<T> implements Comparator<T> {
     /**
      * Returns an ordering which treats all values as equal,indicating
      * "no ordering." Passing this ordering to any stable sort algorithm results
-     * in no change to the order of elements.Note especially thata sortedCopy
+     * in no change to the order of elements.Note especially that sortedCopy
      * and immutableSortedCopy are stable, and in the returned instance these
      * are implemented by simply copying the source list.
      * 
      * Example:
-     * Ordering.allEqual().nullsLast().sortedCopy(asList(t,null,e,s,null,t,null)
-     * );
+     * Ordering.allEqual().nullsLast().sortedCopy(asList(t,null,e,s,null,t,null));
      * 
      * @return
      */
@@ -263,30 +270,472 @@ public abstract class Ordering<T> implements Comparator<T> {
     public <S extends T> Ordering<S> nullsFirst() {
         return new NullsFirstOrdering<S>(this);
     }
-    
+
     @GwtCompatible(serializable = true)
     public <S extends T> Ordering<S> nullsLast() {
-      return new NullsLastOrdering<S>(this);
+        return new NullsLastOrdering<S>(this);
     }
-    
+
     /**
-     * Returns a new ordering on F which orders elements by first applying a 
-     * function to them then comparing those results using this.
-     * For example, to compare objects by their string forms, in a case-insensitive manner, use:
+     * Returns a new ordering on F which orders elements by first applying a
+     * function to them then comparing those results using this. For example, to
+     * compare objects by their string forms, in a case-insensitive manner, use:
      * 
-     *  Ordering.from(String.CASE_INSENSITIVE_ORDER).onResultOf(Functions.toStringFunction())
+     * Ordering.from(String.CASE_INSENSITIVE_ORDER).onResultOf(Functions.
+     * toStringFunction())
+     * 
      * @param function
      * @return
      */
     @GwtCompatible
-    public <F> Ordering<F> onResultOf(Function<F,? extends T> function){
-        return new ByFunctionOrdering<F,T>(function,this);
+    public <F> Ordering<F> onResultOf(Function<F, ? extends T> function) {
+        return new ByFunctionOrdering<F, T>(function, this);
     }
-    
-    <T2 extends T> Ordering<Map.Entry<T2, ?>> onKeys(){
-        return onResultOf(Maps.<T2>keyFunction());
-    }
-    
-    
 
+    <T2 extends T> Ordering<Map.Entry<T2, ?>> onKeys() {
+        return onResultOf(Maps.<T2> keyFunction());
+    }
+
+    /**
+     * Returns an ordering which first uses the ordering this , but which in the
+     * event of a "tie", then delegate to secondaryComparator. For example, to
+     * sort a bug list first by status and second by priority, you might use
+     * byStatus.compound(byPriority).For a compound ordering with three or more
+     * components,simply chain multiple calls to this method.
+     * 
+     * An ordering produced by this method, or a chain of calls to this method,
+     * is equivalent to one created using compound(Iterable) on the same
+     * component comparators.
+     * 
+     * @param secondaryComparator
+     * @return
+     */
+    @GwtCompatible(serializable = true)
+    public <U extends T> Ordering<U> compound(Comparartor<? super U> secondaryComparator) {
+        return new CompoundOrdering<U>(this, checkNotNull(secondaryComparator));
+    }
+
+    /**
+     * Returns a new ordering which sorts iterables by comparing corresponding
+     * elements pairwise until a nonzero result is found; imposes
+     * "dictionary order". If the end of one iterable is reached, but not the
+     * other, the shorter iterable is considered to be less than the longer one.
+     * For example, a lexicographical natural ordering over integers considers
+     * {@code [] < [1] < [1, 1] <
+     * [1, 2] < [2]}.
+     *
+     * <p>
+     * Note that {@code ordering.lexicographical().reverse()} is not equivalent
+     * to {@code
+     * ordering.reverse().lexicographical()} (consider how each would order
+     * {@code [1]} and {@code [1,
+     * 1]}).
+     *
+     * <p>
+     * <b>Java 8 users:</b> Use {@link Comparators#lexicographical(Comparator)}
+     * instead.
+     *
+     * @since 2.0
+     */
+    @GwtCompatible(serializable = true)
+    // type parameter <S> lets us avoid the extra <String> in statements like:
+    // Ordering<Iterable<String>> o =
+    // Ordering.<String>natural().lexicographical();
+    public <S extends T> Ordering<Iterable<S>> lexicographical() {
+        /*
+         * Note that technically the returned ordering should be capable of
+         * handling not just {@code Iterable<S>} instances, but also any {@code
+         * Iterable<? extends S>}. However, the need for this comes up so rarely
+         * that it doesn't justify making everyone else deal with the very ugly
+         * wildcard.
+         */
+        return new LexicographicalOrdering<S>(this);
+    }
+
+    // Regular instance methods
+
+    @Override
+    public abstract int compare(@Nullable T left, @Nullable T right);
+
+    /**
+     * Returns the least of the specified values according to this ordering. If
+     * there are multiple least values, the first of those is returned. The
+     * iterator will be left exhausted:its hasNext() method will return false;
+     * 
+     * @param iterator
+     *            the iterator whose minimum element is to be determined.
+     * @throws NoSuchElementException
+     *             if iterator is empty
+     * @throws ClassCastException
+     *             if the parameters are not mutually comparable under this
+     *             ordering.
+     * 
+     */
+    public <E extends T> E min(Iterator<E> iterator) {
+        E minSoFar = iterator.next();
+
+        while (iterator.hasNext()) {
+            minSoFar = min(minSoFar, iterator.next());
+        }
+
+        return minSoFar;
+    }
+
+    /**
+     * Returns the least of the specified values according to this ordering. If
+     * there are multiple least values, the first of those is returned.
+     * 
+     * @param iterable
+     *            the iterable whose minimum element is to be determined
+     * @throws NoSuchElementException
+     *             if {@code iterable} is empty
+     * @throws ClassCastException
+     *             if the parameters are not <i>mutually comparable</i> under
+     *             this ordering.
+     */
+    public <E extends T> E min(Iterable<E> iterable) {
+        return min(iterable.iterator());
+    }
+
+    /**
+     * Returns the lesser of the two values according to this ordering. If the
+     * values compare as 0, the first is returned.
+     * 
+     * Implementation note: this method is invoked by the default
+     * implementations of the other min overloads, so overriding it will affect
+     * their behavior.
+     * 
+     * @param a
+     *            value to compare , returned if less than or equal to b.
+     * @param b
+     * @throws ClassCastException
+     *             if the parameters are not mutually comparable under this
+     *             ordering.
+     */
+    public <E extends T> E min(@Nullable E a, @Nullable E b) {
+        return (compare(a, b) <= 0) ? a : b;
+    }
+
+    /**
+     * Returns the least of the specified values according to this morning.If
+     * there are multiple least values, the first of those is returned.
+     * 
+     * @param a
+     * @param b
+     * @param c
+     * @param rest
+     *            values to compare
+     * @throws ClassCastException
+     *             if the parameters are not mutually comparable under this
+     *             ordering.
+     */
+    public <E extends T> E min(@Nullable E a, @Nullable E b, @Nullable E c, E... rest) {
+        E minSoFar = min(min(a, b), c);
+        for (E r : rest) {
+            minSoFar = min(minSoFar, r);
+        }
+
+        return minSoFar;
+    }
+
+    /**
+     * Returns the greatest of the specified values according to this ordering.
+     * If there are multiple greatest values, the first of those is returned.
+     * The iterator will be left exhausted: its hasNext() method will return
+     * false.
+     * 
+     * @param iterator
+     *            the iterator whose maximum element is to be determined.
+     * @throws NoSuchElementException
+     *             if iterator is empty.
+     * 
+     */
+    public <E extends T> E max(Iterator<E> iterator) {
+        E maxSoFar = iterator.next();
+
+        while (iterator.hasNext()) {
+            maxSoFar = max(maxSoFar, iterator.next());
+        }
+
+        return maxSoFar;
+    }
+
+    /**
+     * Returns the greatest of the specified values according to this ordering.
+     * If there are multiple greatest values, the first of those is returned.
+     *
+     * @param iterable
+     *            the iterable whose maximum element is to be determined
+     * 
+     * @throws NoSuchElementException
+     *             if {@code iterable} is empty
+     * @throws ClassCastException
+     *             if the parameters are not <i>mutually comparable</i> under
+     *             this ordering.
+     */
+    public <E extends T> E max(Iterable<E> iterable) {
+        return max(iterable.iterator());
+    }
+
+    /**
+     * Returns the greater of the two values according to this ordering. If the
+     * values compare as 0, the first is returned.
+     * 
+     * @param a
+     *            value to compare, returned if greater than or equal to b.
+     * @param b
+     *            value to compare.
+     * @throws ClassCastException
+     *             if the parameters are not <i>mutually comparable</i> under
+     *             this ordering.
+     */
+    public <E extends T> E max(@Nullable E a, @Nullable E b) {
+        return (compare(a, b) >= 0) ? a : b;
+    }
+
+    /**
+     * Returns the greatest of the specified values according to this ordering.
+     * If there are multiple greatest values, the first of those is returned.
+     * 
+     * @param a
+     *            value to compare, returned if greater than or equal to the
+     *            rest.
+     * @param b
+     *            value to compare
+     * @param c
+     *            value to compare
+     * @param rest
+     *            values to compare
+     * @throws ClassCastException
+     *             if the parameters are not <i>mutually comparable</i> under
+     *             this ordering.
+     */
+    public <E extends T> E max(@Nullable E a, @Nullable E b, @Nullable E c, E... rest) {
+        E maxSoFar = max(max(a, b), c);
+
+        for (E r : rest) {
+            maxSoFar = max(maxSoFar, r);
+        }
+
+        return maxSoFar;
+    }
+
+    public <E extends T> List<E> leastOf(Iterable<E> iterable, int k) {
+        if (iterable instanceof Collection) {
+            Collection<E> collection = (Collection<E>) iterable;
+            if (collection.size() <= 2L * k) {
+                @SuppressWarnings("unchecked")
+                E[] array = (E[]) collection.toArray();
+                Arrays.sort(array, this);
+                if (array.length > k) {
+                    array = Arrays.copyOf(array, k);
+                }
+                return Collections.unmodifiableList(Arrays.asList(array));
+            }
+        }
+        return leastOf(iterable.iterator(), k);
+    }
+
+    /**
+     * Returns the k least elements from the given iterator according to this
+     * ordering, in order from least to greatest. If there are fewer than k
+     * elements present,all will be included.
+     * 
+     * When multiple elements are equivalent , it is undefined which will come
+     * first.
+     * 
+     * @return an immutable RandomAccess list of the k least elements in
+     *         ascending order
+     * @throws IllegalArgumentException
+     *             if k is negative.
+     */
+    public <E extends T> List<E> leastOf(Iterator<E> iterator, int k) {
+        checkNotNull(iterator);
+        checkNonnegative(k, "k");
+
+        if (k == 0 || !iterator.hasNext()) {
+            return ImmutableList.of();
+        } else if (k >= Integer.MAX_VALUE / 2) {
+            // k is realy large ; just do a straightforward sorted-copy-and
+            // sublist
+            ArrayList<E> list = Lists.newArrayList(iterator);
+            Collections.sort(list, this);
+            if (list.size() > k) {
+                list.subList(k, list.size()).clear();
+            }
+            list.trimToSize();
+            return Collections.unmodifiableList(list);
+        } else {
+            TopKSelector<E> selector = TopKSelector.least(k, this);
+            selector.offerAll(iterator);
+            return selector.topK();
+        }
+    }
+
+    /**
+     * Returns the {@code k} greatest elements of the given iterable according
+     * to this ordering, in order from greatest to least. If there are fewer
+     * than {@code k} elements present, all will be included.
+     *
+     * <p>
+     * The implementation does not necessarily use a <i>stable</i> sorting
+     * algorithm; when multiple elements are equivalent, it is undefined which
+     * will come first.
+     *
+     * @return an immutable {@code RandomAccess} list of the {@code k} greatest
+     *         elements in <i>descending order</i>
+     * @throws IllegalArgumentException
+     *             if {@code k} is negative
+     * @param iterable
+     * @param k
+     * @return
+     */
+    public <E extends T> List<E> greatestOf(Iterable<E> iterable, int k) {
+        return reverse().leastOf(iterable, k);
+    }
+
+    /**
+     * Returns the {@code k} greatest elements from the given iterator according
+     * to this ordering, in order from greatest to least. If there are fewer
+     * than {@code k} elements present, all will be included.
+     *
+     * <p>
+     * The implementation does not necessarily use a <i>stable</i> sorting
+     * algorithm; when multiple elements are equivalent, it is undefined which
+     * will come first.
+     * 
+     * @return an immutable {@code RandomAccess} list of the {@code k} greatest
+     *         elements in <i>descending order</i>
+     * @throws IllegalArgumentException
+     *             if {@code k} is negative
+     */
+
+    public <E extends T> List<E> greatestOf(Iterator<E> iterator, int k) {
+        return reverse().leastOf(iterator, k);
+    }
+
+    /**
+     * Returns a <b>mutable</b> list containing {@code elements} sorted by this ordering; use this
+     * only when the resulting list may need further modification, or may contain {@code null}. The
+     * input is not modified. The returned list is serializable and has random access.
+     *
+     * <p>Unlike {@link Sets#newTreeSet(Iterable)}, this method does not discard elements that are
+     * duplicates according to the comparator. The sort performed is <i>stable</i>, meaning that such
+     * elements will appear in the returned list in the same order they appeared in {@code elements}.
+     *
+     * <p><b>Performance note:</b> According to our
+     * benchmarking
+     * on Open JDK 7, {@link #immutableSortedCopy} generally performs better (in both time and space)
+     * than this method, and this method in turn generally performs better than copying the list and
+     * calling {@link Collections#sort(List)}.
+     */
+    // TODO(kevinb): rerun benchmarks including new options
+    public <E extends T> List<E> sortedCopy(Iterable<E> elements){
+        @SuppressWarnings("unchecked")
+        E[] array = (E[])Iterables.toArray(elements);
+        Arrays.sort(array,this);
+        return Lists.newArrayList(Arrays.asList(array));
+    }
+    
+    
+    /**
+     * Returns an immutable list containing elements sorted by this ordering.
+     * The input is not modified. Unlike Sets/newTreeSet(Iterable), this method
+     * does not discard elements that are duplicates accroding to the
+     * comparator. The sort preformed is stable , meaning that such elements
+     * will appear in the returned list in the same order they appeared in
+     * elements
+     * 
+     * Performance note : According to our benchmarking on open JDK 7 , this
+     * method is the most effecient way to make a sorted copy of a collection.
+     * 
+     * @throws NullPointerException
+     *             if any element of elements is null
+     * 
+     * @param elements
+     * @return
+     */
+    public <E extends T> ImmutableList<E> immutableSortedCopy(Iterable<E> elements) {
+        return ImmutableList.sortedCopyOf(this, elements);
+    }
+
+    /**
+     * Returns true if each element in iterable after the first is greater than
+     * or equal to the element that preceded it, according to this ordering.
+     * Note that this is always true when the iterable has fewer than two
+     * elements.
+     * 
+     * @param iterable
+     * @return
+     */
+    public boolean isOrdered(Iterable<? extends T> iterable) {
+        Iterator<? extends T> it = iterable.iterator();
+        if (it.hasNext()) {
+            T prev = it.next();
+            while (it.hasNext()) {
+                T next = it.next();
+                if (compare(prev, next) > 0) {
+                    return false;
+                }
+                prev = next;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Returns {@code true} if each element in {@code iterable} after the first
+     * is <i>strictly</i> greater than the element that preceded it, according
+     * to this ordering. Note that this is always true when the iterable has
+     * fewer than two elements.
+     *
+     * <p>
+     * <b>Java 8 users:</b> Use the equivalent
+     * {@link Comparators#isInStrictOrder(Iterable, Comparator)} instead, since
+     * the rest of {@code Ordering} is mostly obsolete (as explained in the
+     * class documentation).
+     */
+    public boolean isStrictlyOrdered(Iterable<? extends T> iterable) {
+        Iterator<? extends T> it = iterable.iterator();
+        if (it.hasNext()) {
+            T prev = it.next();
+            while (it.hasNext()) {
+                T next = it.next();
+                if (compare(prev, next) >= 0) {
+                    return false;
+                }
+                prev = next;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Searches for key using the binary search algorithm. The list must be
+     * sorted using this ordering.
+     * 
+     * @param sortedList
+     *            the list to be searched.
+     * @param key
+     *            the key to be searched for.
+     * @return
+     */
+    public int binarySearch(List<? extends T> sortedList, @Nullable T key) {
+        return Collections.binarySearch(sortedList, key, this);
+    }
+
+    static class IncomparableValueException extends ClassCastException {
+        final Object value;
+
+        IncomparableValueException(Object value) {
+            super("Cannot compare  value: " + value);
+            this.value = value;
+        }
+
+        private static final long serialVersionUID = 0;
+    }
+
+    //
+    static final int LEFT_IS_GREATER = 1;
+    static final int RIGHT_IS_GREATER = -1;
 }
